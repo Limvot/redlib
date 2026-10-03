@@ -24,12 +24,9 @@
 
         inherit (pkgs) lib;
 
-        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-          targets = [ "x86_64-unknown-linux-musl" ];
-        };
+        rustToolchain = pkgs.rust-bin.stable.latest.default;
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
-
 
         src = lib.cleanSourceWith {
           src = craneLib.path ./.;
@@ -44,8 +41,12 @@
           strictDeps = true;
           doCheck = false;
 
-          CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
-          CARGO_BUILD_RUSTFLAGS = "-C target-feature=+crt-static";
+          # for building vendored OpenSSL
+          nativeBuildInputs = with pkgs.buildPackages; [
+            perl
+            # pkg-config
+          ];
+
         };
       in
       {
