@@ -510,11 +510,7 @@ pub async fn json(path: String, quarantine: bool) -> Result<Value, String> {
 						}
 						Err(e) => {
 							error!("Got an invalid response from reddit {e}. Status code: {status}");
-							if status.is_server_error() {
-								Err("Reddit is having issues, check if there's an outage".to_string())
-							} else {
-								err("Failed to parse page JSON data", e.to_string(), path)
-							}
+							Err(non_json_response_error(status.as_u16(), &e.to_string(), &path))
 						}
 					}
 				}
@@ -522,6 +518,19 @@ pub async fn json(path: String, quarantine: bool) -> Result<Value, String> {
 			}
 		}
 		Err(e) => err("Couldn't send request to Reddit", e, path),
+	}
+}
+
+/// Turn a non-JSON Reddit response into a message that names the real cause.
+/// Reddit's block page is HTML with status 403, which used to surface as a
+/// confusing JSON parse error.
+fn non_json_response_error(status: u16, parse_error: &str, path: &str) -> String {
+	if status == 403 {
+		format!("Reddit blocked this request (403 Forbidden): Reddit now requires a logged-in session for this endpoint | {path}")
+	} else if (500..=599).contains(&status) {
+		"Reddit is having issues, check if there's an outage".to_string()
+	} else {
+		format!("Failed to parse page JSON data: {parse_error} | {path}")
 	}
 }
 

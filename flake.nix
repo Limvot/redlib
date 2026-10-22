@@ -41,10 +41,15 @@
           strictDeps = true;
           doCheck = false;
 
-          # for building vendored OpenSSL
+          # wreq's boring-sys builds vendored BoringSSL: needs perl, cmake, ninja,
+          # and go for the boringssl codegen steps. (Pre-wreq builds only needed
+          # perl for vendored OpenSSL.)
           nativeBuildInputs = with pkgs.buildPackages; [
             perl
-            # pkg-config
+            cmake
+            ninja
+            go
+            pkg-config
           ];
 
         };
