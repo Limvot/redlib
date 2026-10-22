@@ -42,13 +42,15 @@
           doCheck = false;
 
           # wreq's boring-sys builds vendored BoringSSL: needs perl, cmake, ninja,
-          # and go for the boringssl codegen steps. (Pre-wreq builds only needed
-          # perl for vendored OpenSSL.)
+          # go for the boringssl codegen steps, and git (btls-sys runs `git init`
+          # + applies its boringssl patches from a scratch repo). (Pre-wreq builds
+          # only needed perl for vendored OpenSSL.)
           nativeBuildInputs = with pkgs.buildPackages; [
             perl
             cmake
             ninja
             go
+            git
             pkg-config
           ];
 
