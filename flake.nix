@@ -52,6 +52,7 @@
             go
             git
             pkg-config
+            rustPlatform.bindgenHook
           ];
 
         };
