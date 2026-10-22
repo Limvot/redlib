@@ -76,11 +76,34 @@ fn cookies(quarantine: bool) -> String {
 }
 
 async fn get(url: &str, quarantine: bool) -> Result<String, String> {
-	let res = CLIENT.get(url).header("Cookie", cookies(quarantine)).send().await.map_err(|e| e.to_string())?;
+	let res = CLIENT.get(url).headers(scrape_headers(&cookies(quarantine))).send().await.map_err(|e| e.to_string())?;
 	if !res.status().is_success() {
 		return Err(format!("Reddit returned {} for comments | {url}", res.status()));
 	}
 	res.text().await.map_err(|e| e.to_string())
+}
+
+/// Headers for the shreddit fragment endpoints. The OAuth token is required:
+/// reddit.com's edge serves datacenter IPs the "blocked by network security"
+/// page for these HTML routes unless the request carries the app-only bearer
+/// (the JSON API on oauth.reddit.com is fine without it). The spoofed device
+/// headers go along with it, but not the Android User-Agent or Content-Type -
+/// the wreq desktop emulation supplies those, and desktop clients get 25
+/// comments per request instead of 10.
+fn scrape_headers(cookie: &str) -> wreq::header::HeaderMap {
+	use std::str::FromStr;
+	let mut headers = wreq::header::HeaderMap::new();
+	headers.insert(wreq::header::COOKIE, cookie.parse().unwrap());
+	let oauth = crate::client::OAUTH_CLIENT.load_full();
+	for (key, value) in &oauth.headers_map {
+		if key.eq_ignore_ascii_case("user-agent") || key.eq_ignore_ascii_case("content-type") || key.eq_ignore_ascii_case("cookie") {
+			continue;
+		}
+		if let (Ok(name), Ok(value)) = (wreq::header::HeaderName::from_str(key), wreq::header::HeaderValue::from_str(value)) {
+			headers.insert(name, value);
+		}
+	}
+	headers
 }
 
 /// Loads the comments behind a cursor, like reddit.com's "more replies" buttons.
@@ -91,7 +114,7 @@ async fn more(sub: &str, id: &str, cursor: &str, quarantine: bool) -> Result<Str
 	let body = serde_urlencoded::to_string([("cursor", cursor), ("csrf_token", &csrf)]).map_err(|e| e.to_string())?;
 	let res = CLIENT
 		.post(&url)
-		.header("Cookie", format!("{}; csrf_token={csrf}", cookies(quarantine)))
+		.headers(scrape_headers(&format!("{}; csrf_token={csrf}", cookies(quarantine))))
 		.header("Content-Type", "application/x-www-form-urlencoded")
 		.body(body)
 		.send()
