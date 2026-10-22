@@ -422,7 +422,7 @@ pub async fn json(path: String, quarantine: bool) -> Result<Value, String> {
 	let is_comments = path.contains("/comments/");
 	let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
 	if is_comments && (crate::utils::param(&path, "cursor").is_some() || now < COMMENTS_API_BLOCKED_UNTIL.load(Ordering::Relaxed)) {
-		return crate::shreddit::thread(&path, quarantine).await;
+		return Box::pin(crate::shreddit::thread(&path, quarantine)).await;
 	}
 
 	// First, handle rolling over the OAUTH_CLIENT if need be.
@@ -445,7 +445,7 @@ pub async fn json(path: String, quarantine: bool) -> Result<Value, String> {
 			if is_comments && status == 403 && is_html {
 				warn!("Comments API blocked, scraping comments for the next {COMMENTS_API_RETRY_SECS}s");
 				COMMENTS_API_BLOCKED_UNTIL.store(now + COMMENTS_API_RETRY_SECS, Ordering::Relaxed);
-				return crate::shreddit::thread(&path, quarantine).await;
+				return Box::pin(crate::shreddit::thread(&path, quarantine)).await;
 			}
 
 			let reset: Option<String> = if let (Some(remaining), Some(reset), Some(used)) = (
