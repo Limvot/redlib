@@ -1,5 +1,5 @@
 use crate::dbg_msg;
-use crate::oauth::{force_refresh_token, token_daemon, Oauth, OauthBackendImpl};
+use crate::oauth::{force_refresh_token, token_daemon, try_refresh_token, Oauth, OauthBackendImpl};
 use crate::server::RequestExt;
 use crate::utils::{format_url, Post};
 use arc_swap::ArcSwap;
@@ -15,6 +15,7 @@ use std::result::Result;
 use std::sync::atomic::Ordering;
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64};
 use std::sync::LazyLock;
+use std::time::Duration;
 use wreq::dns::{Addrs, Name, Resolve, Resolving};
 use wreq::redirect::Policy;
 use wreq::{header as wreq_header, Client as WreqClient, Method, Response as WreqResponse};
@@ -33,9 +34,24 @@ const ALTERNATIVE_REDDIT_DNS_HOST: &str = "dualstack.reddit.map.fastly.net";
 pub static CLIENT: LazyLock<WreqClient> = LazyLock::new(build_client);
 
 pub static OAUTH_CLIENT: LazyLock<ArcSwap<Oauth>> = LazyLock::new(|| {
-	let client = block_on(Oauth::new());
-	tokio::spawn(token_daemon());
-	ArcSwap::new(client.into())
+	// Wait briefly for a real client so startup checks and the first requests
+	// are warm. If Reddit is in a block wave this can fail for hours (upstream
+	// redlib#582 exit(1)s here, killing the service), so fall back to a
+	// placeholder and keep retrying in the background: the server stays up and
+	// renders error pages until a token lands.
+	let initial = block_on(async { tokio::time::timeout(Duration::from_secs(30), Oauth::new()).await });
+	match initial {
+		Ok(client) => {
+			tokio::spawn(token_daemon());
+			ArcSwap::new(client.into())
+		}
+		Err(_) => {
+			warn!("[⏳] No OAuth client yet (Reddit blocking us?). Serving error pages and retrying in the background.");
+			tokio::spawn(force_refresh_token());
+			tokio::spawn(token_daemon());
+			ArcSwap::new(Oauth::placeholder().into())
+		}
+	}
 });
 
 pub static OAUTH_RATELIMIT_REMAINING: AtomicU16 = AtomicU16::new(99);
@@ -504,7 +520,9 @@ pub async fn json(path: String, quarantine: bool) -> Result<Value, String> {
 								// OAuth token has expired; http status 401
 								if json["message"] == "Unauthorized" {
 									error!("Forcing a token refresh");
-									let () = force_refresh_token().await;
+									// Spawn instead of awaiting: the refresh retries until
+									// Reddit lets us in, and blocking here would hang the page.
+									tokio::spawn(force_refresh_token());
 									return Err("OAuth token has expired. Please refresh the page!".to_string());
 								}
 
@@ -580,7 +598,8 @@ pub async fn rate_limit_check() -> Result<(), String> {
 	}
 	// Now, we switch out the OAuth client.
 	// This checks for the IP rate limit association.
-	force_refresh_token().await;
+	// Bounded: an ongoing block wave must not wedge startup.
+	try_refresh_token().await;
 	// Now, check a new sub to break cache.
 	self_check("rust").await?;
 	// Again, assert the rate limit check.
