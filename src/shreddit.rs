@@ -9,11 +9,14 @@
 
 use crate::client::{json, CLIENT};
 use crate::utils::{format_url, param};
+use cached::proc_macro::cached;
+use log::warn;
 use chrono::DateTime;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use scraper::{ElementRef, Html, Node, Selector};
 use serde_json::{json as json_value, Value};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::LazyLock;
 
 const SVC_BASE: &str = "https://www.reddit.com/svc/shreddit";
@@ -23,10 +26,57 @@ static MORE: LazyLock<Selector> = LazyLock::new(|| Selector::parse(r#"faceplate-
 static CURSOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse(r#"input[name="cursor"]"#).unwrap());
 static MORE_COUNT: LazyLock<Selector> = LazyLock::new(|| Selector::parse("faceplate-number[number]").unwrap());
 
+/// Unix time until which the /svc/shreddit scrape endpoints are assumed rate
+/// limited (429). Their budget is small and per-IP (observed: 200 requests per
+/// ~10 min, shared with ordinary reddit.com browsing), so after a 429 we stop
+/// sending entirely until reddit says the window resets - retrying into the
+/// wall just keeps the instance broken and wastes what little budget remains.
+static SCRAPE_BACKOFF_UNTIL: AtomicU64 = AtomicU64::new(0);
+
+fn now_secs() -> u64 {
+	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
+}
+
+/// Fail fast while the scrape endpoints are known to be rate limited.
+fn check_backoff() -> Result<(), String> {
+	let until = SCRAPE_BACKOFF_UNTIL.load(Ordering::Relaxed);
+	let now = now_secs();
+	if now < until {
+		let secs = until - now;
+		return Err(format!(
+			"Reddit is rate limiting comments (shared web budget exhausted). Try again in about {} minute(s)",
+			if secs < 60 { 1 } else { secs / 60 }
+		));
+	}
+	Ok(())
+}
+
+/// Record a 429 from the scrape endpoints and build the user-facing error.
+fn rate_limited(res: &wreq::Response) -> String {
+	let reset = res
+		.headers()
+		.get("x-ratelimit-reset")
+		.and_then(|v| v.to_str().ok())
+		.and_then(|s| s.parse::<u64>().ok())
+		.or_else(|| res.headers().get("retry-after").and_then(|v| v.to_str().ok()).and_then(|s| s.parse::<u64>().ok()))
+		.unwrap_or(300)
+		.clamp(30, 900);
+	SCRAPE_BACKOFF_UNTIL.store(now_secs() + reset, Ordering::Relaxed);
+	warn!("[⏳] Comments scrape endpoint rate limited (429). Backing off for {reset}s.");
+	format!("Reddit is rate limiting comments (shared web budget exhausted). Try again in about {} minute(s)", if reset < 60 { 1 } else { reset / 60 })
+}
+
 /// Builds a `/comments/` JSON response for `path` (a `/comments/` API path, as
 /// built by `post::item`). Supports the `sort` and `cursor` query parameters
 /// and single comment threads.
-pub async fn thread(path: &str, quarantine: bool) -> Result<Value, String> {
+///
+/// Cached for a couple of minutes: each call costs scarce scrape-endpoint
+/// budget (1-2 requests), and comment threads are re-read far more often than
+/// they change (reloads, back-navigation, link previews).
+#[cached(size = 256, time = 120, result = true)]
+pub async fn thread(path: String, quarantine: bool) -> Result<Value, String> {
+	check_backoff()?;
+	let path = &path;
 	let (id, comment_id) = parse_path(path).ok_or_else(|| format!("Couldn't parse post path | {path}"))?;
 
 	let post = json(format!("/by_id/t3_{id}.json?raw_json=1"), quarantine).await?;
@@ -76,7 +126,11 @@ fn cookies(quarantine: bool) -> String {
 }
 
 async fn get(url: &str, quarantine: bool) -> Result<String, String> {
+	check_backoff()?;
 	let res = CLIENT.get(url).headers(scrape_headers(&cookies(quarantine))).send().await.map_err(|e| e.to_string())?;
+	if res.status() == 429 {
+		return Err(rate_limited(&res));
+	}
 	if !res.status().is_success() {
 		return Err(format!("Reddit returned {} for comments | {url}", res.status()));
 	}
@@ -108,6 +162,7 @@ fn scrape_headers(cookie: &str) -> wreq::header::HeaderMap {
 
 /// Loads the comments behind a cursor, like reddit.com's "more replies" buttons.
 async fn more(sub: &str, id: &str, cursor: &str, quarantine: bool) -> Result<String, String> {
+	check_backoff()?;
 	let url = format!("{SVC_BASE}/more-comments/{sub}/t3_{id}");
 	// Double-submit CSRF check: any token works as long as cookie and form match
 	let csrf = format!("{:032x}", fastrand::u128(..));
@@ -120,6 +175,9 @@ async fn more(sub: &str, id: &str, cursor: &str, quarantine: bool) -> Result<Str
 		.send()
 		.await
 		.map_err(|e| e.to_string())?;
+	if res.status() == 429 {
+		return Err(rate_limited(&res));
+	}
 	if !res.status().is_success() {
 		return Err(format!("Reddit returned {} for more comments | {url}", res.status()));
 	}
