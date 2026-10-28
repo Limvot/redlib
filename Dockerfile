@@ -9,7 +9,7 @@ ARG BINDGEN_EXTRA_CLANG_ARGS=
 ########################
 ## builder image
 ########################
-FROM ghcr.io/rust-cross/rust-musl-cross:${RUST_CROSS_IMAGE} AS builder
+FROM --platform=linux/amd64 ghcr.io/rust-cross/rust-musl-cross:${RUST_CROSS_IMAGE} AS builder
 
 ARG RUST_TARGET
 ARG CROSS_GNU_PACKAGES
