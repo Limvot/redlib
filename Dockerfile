@@ -13,7 +13,7 @@ RUN rustup component add rust-src
 WORKDIR /redlib
 COPY . .
 
-# Injected automatically by Docker Buildx for each platform in your workflow matrix
+# Injected automatically by Docker Buildx for each platform in your workflow
 ARG TARGETPLATFORM
 
 # Map Docker architectures to Rust/Zig musl triples dynamically
@@ -36,8 +36,7 @@ RUN file /usr/local/bin/redlib
 ########################
 ## Release Image
 ########################
-ARG ALPINE_VERSION=3.23
-FROM alpine:${ALPINE_VERSION} AS release
+FROM alpine AS release
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /usr/local/bin/redlib /usr/local/bin/redlib
 
