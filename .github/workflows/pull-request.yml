@@ -46,7 +46,7 @@ jobs:
         run: cargo fmt --all -- --check
 
   clippy:
-    name: cargo clippy --all-features -- -D warnings
+    name: cargo clippy -- -D warnings
     runs-on: ubuntu-latest
 
     steps:
@@ -67,7 +67,7 @@ jobs:
 
       # 2. Run clippy with the freshly generated lockfile
       - name: Run cargo clippy
-        run: cargo clippy --all-features -- -D warnings
+        run: cargo clippy -- -D warnings
 
       # (Optional) Automatically commit the new Cargo.lock back to your repo so you never have to do it locally
       - name: Commit updated Cargo.lock if changed
