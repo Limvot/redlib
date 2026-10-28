@@ -49,4 +49,10 @@ USER redlib
 EXPOSE 8080
 HEALTHCHECK --interval=1m --timeout=3s CMD wget --spider -q http://localhost:8080/settings || exit 1
 
+LABEL org.opencontainers.image.title="Redlib" \
+      org.opencontainers.image.description="Private front-end for Reddit written in Rust" \
+      org.opencontainers.image.url="https://github.com/evrial/redlib" \
+      org.opencontainers.image.source="https://github.com/evrial/redlib" \
+      org.opencontainers.image.licenses="AGPL-3.0"
+
 CMD ["/usr/local/bin/redlib"]
