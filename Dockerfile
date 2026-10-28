@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     g++ \
     perl \
-    file \
+    binutils \
     && rm -rf /var/lib/apt/lists/*
 
 RUN rustup component add rust-src
@@ -48,13 +48,11 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=reg-${TARGETPLATFORM}
     cargo zigbuild --release --target "$T" --bin redlib && \
     cp target/"$T"/release/redlib /usr/local/bin/redlib
 
-# Final verification of the binary architecture
-RUN file /usr/local/bin/redlib
-
+RUN strip /usr/local/bin/redlib
 ########################
 ## Release Image
 ########################
-FROM alpine:latest AS release
+FROM alpine AS release
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /usr/local/bin/redlib /usr/local/bin/redlib
 
@@ -64,5 +62,11 @@ USER redlib
 
 EXPOSE 8080
 HEALTHCHECK --interval=1m --timeout=3s CMD wget --spider -q http://localhost:8080/settings || exit 1
+
+LABEL org.opencontainers.image.title="Redlib" \
+      org.opencontainers.image.description="Private front-end for Reddit written in Rust" \
+      org.opencontainers.image.url="https://github.com/evrial/redlib" \
+      org.opencontainers.image.source="https://github.com/evrial/redlib" \
+      org.opencontainers.image.licenses="AGPL-3.0"
 
 CMD ["/usr/local/bin/redlib"]
