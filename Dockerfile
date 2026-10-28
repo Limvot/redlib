@@ -1,12 +1,7 @@
-# supported versions here: https://hub.docker.com/_/rust
 ARG ALPINE_VERSION=3.24
+FROM --platform=$BUILDPLATFORM ghcr.io/rust-cross/cargo-zigbuild AS builder
 
-# Use the official Rust image as a stable base for the builder
-FROM --platform=$BUILDPLATFORM rust:alpine${ALPINE_VERSION} AS builder
-
-# Install zig and cargo-zigbuild
-RUN apk add --no-cache zig cargo-zigbuild musl-dev git make perl file
-
+RUN apk add --no-cache musl-dev git make perl file
 RUN rustup component add rust-src
 
 WORKDIR /redlib
