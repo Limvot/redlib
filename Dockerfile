@@ -7,7 +7,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     g++ \
     perl \
-    binutils \
     && rm -rf /var/lib/apt/lists/*
 
 RUN rustup component add rust-src
@@ -48,7 +47,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=reg-${TARGETPLATFORM}
     cargo zigbuild --release --target "$T" --bin redlib && \
     cp target/"$T"/release/redlib /usr/local/bin/redlib
 
-RUN strip /usr/local/bin/redlib
 ########################
 ## Release Image
 ########################
