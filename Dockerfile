@@ -1,9 +1,12 @@
 # Use the official cargo-zigbuild image which natively cross-compiles all targets from any host
 FROM --platform=$BUILDPLATFORM ghcr.io/rust-cross/cargo-zigbuild:latest AS builder
 
+# Install cmake and build tools required for C/C++ dependencies like BoringSSL (btls-sys)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     make \
+    cmake \
+    g++ \
     perl \
     file \
     && rm -rf /var/lib/apt/lists/*
@@ -36,7 +39,7 @@ RUN file /usr/local/bin/redlib
 ########################
 ## Release Image
 ########################
-FROM alpine AS release
+FROM alpine:3.23 AS release
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /usr/local/bin/redlib /usr/local/bin/redlib
 
