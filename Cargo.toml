@@ -73,3 +73,4 @@ strip = "symbols"
 
 [patch.crates-io]
 btls = { git = "https://github.com/0x676e67/btls", branch = "main" }
+wreq = { git = "https://github.com/0x676e67/wreq", branch = "main" }
