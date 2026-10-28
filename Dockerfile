@@ -1,5 +1,5 @@
 # supported versions here: https://hub.docker.com/_/rust
-ARG ALPINE_VERSION=latest
+ARG ALPINE_VERSION=3.24
 
 # Use the official Rust image as a stable base for the builder
 FROM --platform=$BUILDPLATFORM rust:alpine${ALPINE_VERSION} AS builder
