@@ -60,7 +60,7 @@ base2048 = "2.0.2"
 revision = "0.17.0"
 fake_user_agent = "0.2.2"
 wreq = { version = "0.16.1", features = ["brotli", "gzip", "deflate", "zstd", "json", "stream", "socks"] }
-wreq-util = { version = "3.0.0-rc.10" }
+wreq-util = { version = "0.2.0" }
 
 [dev-dependencies]
 lipsum = "0.9.0"
@@ -74,3 +74,4 @@ strip = "symbols"
 [patch.crates-io]
 btls = { git = "https://github.com/0x676e67/btls", branch = "main" }
 wreq = { git = "https://github.com/0x676e67/wreq", branch = "main" }
+wreq-util = { git = "https://github.com/0x676e67/wreq", branch = "main" }
