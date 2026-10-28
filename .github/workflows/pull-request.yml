@@ -6,12 +6,8 @@ env:
 
 on:
   push:
-    branches:
-      - 'main'
-
+    branches: [ main, master ]
   pull_request:
-    branches:
-      - 'main'
     
 jobs:
   test:
@@ -63,5 +59,16 @@ jobs:
           toolchain: stable
           components: clippy
 
+      # 1. Force Cargo to drop the old lockfile and regenerate a fresh one matching your patches
+      - name: Regenerate Cargo.lock for patches
+        run: |
+          rm -f Cargo.lock
+          cargo generate-lockfile
+
+      # 2. Run clippy with the freshly generated lockfile
       - name: Run cargo clippy
         run: cargo clippy -- -D warnings
+
+      # (Optional) Automatically commit the new Cargo.lock back to your repo so you never have to do it locally
+      - name: Commit updated Cargo.lock if changed
+        uses: stefanzweifel/git-auto-commit-action@v4
