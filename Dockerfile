@@ -1,5 +1,6 @@
 FROM --platform=$BUILDPLATFORM ghcr.io/rust-cross/cargo-zigbuild:latest AS builder
 
+RUN rustup default stable
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git make cmake g++ perl file && rm -rf /var/lib/apt/lists/*
 
